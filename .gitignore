@@ -1,0 +1,5 @@
+/target
+libsm3/*.so
+Cargo.lock
+/.idea
+__pycache__/
