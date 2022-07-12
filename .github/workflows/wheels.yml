@@ -1,4 +1,4 @@
-name: Build PSI-ECDH-Curve25519
+name: Build Wheels
 
 on:
   workflow_dispatch:
@@ -54,7 +54,7 @@ jobs:
         target: ${{ matrix.platform.target }}
         manylinux: auto
         container: off
-        args: --release -o dist
+        args: --release --no-sdist -o dist
 
     - name: Build Wheels - musllinux
       uses: messense/maturin-action@main
@@ -62,7 +62,7 @@ jobs:
         target: ${{ matrix.platform.target }}
         manylinux: musllinux_1_1
         container: off
-        args: --release -o dist
+        args: --release --no-sdist -o dist
 
     - name: Upload wheels
       uses: actions/upload-artifact@v2

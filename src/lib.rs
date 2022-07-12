@@ -13,7 +13,7 @@ fn hash(py: Python, a: &[u8]) -> PyObject {
 
 /// A Python module implemented in Rust.
 #[pymodule]
-fn libsm3py(py: Python, m: &PyModule) -> PyResult<()> {
+fn libsm3py(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(hash, m)?)?;
     Ok(())
 }
