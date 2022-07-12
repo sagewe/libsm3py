@@ -1,115 +1,107 @@
-# modify from https://github.com/samuelcolvin/rtoml/blob/master/.github/workflows/ci.yml
-name: build-wheel
+name: Build PSI-ECDH-Curve25519
 
 on:
-  push:
-    branches:
-      - master
-    tags:
-      - '**'
-  pull_request: { }
+  workflow_dispatch:
+    inputs:
+      source:
+        description: 'source branch'
+        required: true
+      type:
+        description: 'publish type, test or testpypi or pypi'
+        required: false
+        default: 'test'
 
 jobs:
-
   build:
-    name: build py3.${{ matrix.python-version }} on ${{ matrix.platform || matrix.os }}
+    name: build wheel on ${{ matrix.platform.image_tag }}
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ubuntu
-          - macos
-          - windows
-        python-version:
-          - '6'
-          - '7'
-          - '8'
-          - '9'
-        include:
-          - os: ubuntu
-            platform: linux
-          - os: windows
-            ls: dir
-
-    runs-on: ${{ format('{0}-latest', matrix.os) }}
+        platform: [
+          { target: "x86_64-unknown-linux-musl", image_tag: "x86_64-musl" },
+          { target: "i686-unknown-linux-musl", image_tag: "i686-musl" },
+          { target: "aarch64-unknown-linux-musl", image_tag: "aarch64-musl" },
+          { target: "armv7-unknown-linux-musleabihf", image_tag: "armv7-musleabihf" },
+          { target: "powerpc64le-unknown-linux-musl", image_tag: "powerpc64le-musl" },
+        ]
+    container:
+      image: docker://messense/rust-musl-cross:${{ matrix.platform.image_tag }}
+      env:
+        CFLAGS_armv7_unknown_linux_musleabihf: '-mfpu=vfpv3-d16'
     steps:
-      - uses: actions/checkout@v2
+    - uses: actions/checkout@v2
+      with:
+        ref: ${{github.event.inputs.source}}
+    - uses: actions/setup-python@v2
+      with:
+        python-version: "3.6"
+    - uses: actions/setup-python@v2
+      with:
+        python-version: "3.7"
+    - uses: actions/setup-python@v2
+      with:
+        python-version: "3.8"
+    - uses: actions/setup-python@v2
+      with:
+        python-version: "3.9"
+    - uses: actions/setup-python@v2
+      with:
+        python-version: "3.10"
+    - name: Build Wheels - manylinux
+      uses: messense/maturin-action@v1
+      with:
+        target: ${{ matrix.platform.target }}
+        manylinux: auto
+        container: off
+        args: --release -o dist
 
-      - name: set up python
-        uses: actions/setup-python@v1
+    - name: Build Wheels - musllinux
+      uses: messense/maturin-action@v1
+      with:
+        target: ${{ matrix.platform.target }}
+        manylinux: musllinux_1_1
+        container: off
+        args: --release -o dist
+
+    - name: Upload wheels
+      uses: actions/upload-artifact@v2
+      with:
+        name: wheels
+        path: dist
+
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    needs: [ build ]
+    steps:
+      - uses: actions/download-artifact@v2
         with:
-          python-version: '3.7'
-
-      - name: set up rust
-        if: matrix.os != 'ubuntu'
-        uses: actions-rs/toolchain@v1
+          name: wheels
+          path: dist
+      - uses: actions/setup-python@v2
         with:
-          profile: minimal
-          toolchain: nightly
-          override: true
-
-      - name: install python dependencies
-        run: |
-          pip install -U setuptools wheel
-          pip install cibuildwheel==1.7.2
-
-      - name: build sdist
-        if: matrix.os == 'ubuntu' && matrix.python-version == '7'
-        run: |
-          pip install -U setuptools-rust
-          python setup.py sdist
-
-      - name: build ${{ matrix.platform || matrix.os }} binaries
-        run: cibuildwheel --output-dir dist
-        env:
-          CIBW_BUILD: 'cp3${{ matrix.python-version }}-*'
-          CIBW_SKIP: '*-win32'
-          CIBW_PLATFORM: ${{ matrix.platform || matrix.os }}
-          CIBW_TEST_REQUIRES: 'pytest'
-          CIBW_TEST_COMMAND: 'pytest {project}/tests -s'
-          CIBW_ENVIRONMENT: 'PATH="$HOME/.cargo/bin:$PATH"'
-          CIBW_ENVIRONMENT_WINDOWS: 'PATH="$UserProfile\.cargo\bin;$PATH"'
-          CIBW_BEFORE_BUILD: >
-            pip install -U setuptools-rust &&
-            rustup default nightly &&
-            rustup show
-          CIBW_BEFORE_BUILD_LINUX: >
-            pip install -U setuptools-rust &&
-            curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain=nightly --profile=minimal -y &&
-            rustup show
-
-      - name: build windows 32bit binaries
-        if: matrix.os == 'windows'
-        run: cibuildwheel --output-dir dist
-        env:
-          CIBW_BUILD: 'cp3${{ matrix.python-version }}-win32'
-          CIBW_PLATFORM: windows
-          CIBW_TEST_REQUIRES: 'pytest'
-          CIBW_TEST_COMMAND: 'pytest {project}/tests -s'
-          CIBW_ENVIRONMENT: 'PATH="$UserProfile\.cargo\bin;$PATH"'
-          CIBW_BEFORE_BUILD: >
-            pip install -U setuptools-rust &&
-            rustup toolchain install nightly-i686-pc-windows-msvc &&
-            rustup default nightly-i686-pc-windows-msvc &&
-            rustup override set nightly-i686-pc-windows-msvc &&
-            rustup show
-
-      - name: list dist files
-        run: ${{ matrix.ls || 'ls -lh' }} dist/
-
-      - name: twine check
+          python-version: 3.6
+      - name: Twine check
         run: |
           pip install -U twine
           twine check dist/*
+      - name: Test Install
+        run: |
+          pip install -U pip
+          pip install --find-link=dist/ libsm3py
+      - name: Upload to PyPI Test
+        if: ${{ github.event.inputs.type == 'testpypi' }}
+        run: |
+          twine upload --repository testpypi dist/* --verbose
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.pypitest_token }}
 
-      - name: upload to pypi
-        if: startsWith(github.ref, 'refs/tags/')
-        run: twine upload dist/*
+      - name: Upload to PyPI
+        if: ${{ github.event.inputs.type == 'pypi' }}
+        run: |
+          twine upload dist/* --verbose
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.pypi_token }}
-
-      - uses: actions/upload-artifact@v2
-        with:
-          path: ./dist/*.whl
-
