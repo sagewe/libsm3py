@@ -49,7 +49,7 @@ jobs:
       with:
         python-version: "3.10"
     - name: Build Wheels - manylinux
-      uses: messense/maturin-action@v1
+      uses: messense/maturin-action@main
       with:
         target: ${{ matrix.platform.target }}
         manylinux: auto
@@ -57,7 +57,7 @@ jobs:
         args: --release -o dist
 
     - name: Build Wheels - musllinux
-      uses: messense/maturin-action@v1
+      uses: messense/maturin-action@main
       with:
         target: ${{ matrix.platform.target }}
         manylinux: musllinux_1_1
