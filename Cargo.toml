@@ -14,10 +14,10 @@ classifier = [
 ]
 
 [dependencies]
-libsm = "0.3"
+libsm = "0.5"
 
 [lib]
-name = "pylibsm3"
+name = "libsm3py"
 crate-type = ["cdylib"]
 
 [dependencies.pyo3]
